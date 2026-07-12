@@ -5,7 +5,15 @@
 #include <complex>
 
 namespace RNP{
+#if defined(MEKIL_HAVE_MKL) && MEKIL_HAVE_MKL
+# ifdef MKL_ILP64
+typedef long long int integer;
+# else
 typedef int integer;
+# endif
+#else
+typedef int integer;
+#endif
 namespace TBLAS{
 
 //#define RNP_FORTRAN_NAME(LCASE,UCASE) LCASE ## _

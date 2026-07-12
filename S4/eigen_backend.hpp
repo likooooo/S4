@@ -70,7 +70,15 @@ inline int Eigensystem_real(std::size_t n,
 #endif
 
 #if defined(S4_HAVE_LAPACK_EIGEN) && !defined(S4_EIGEN_BACKEND_RNP)
+# if defined(MEKIL_HAVE_MKL) && MEKIL_HAVE_MKL
+#  ifdef MKL_ILP64
+typedef long long int integer;
+#  else
 typedef int integer;
+#  endif
+# else
+typedef int integer;
+# endif
 #endif
 
 #endif  // S4_EIGEN_BACKEND_HPP_

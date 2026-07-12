@@ -66,8 +66,14 @@ else()
     message(FATAL_ERROR "Unknown S4_EIGEN_BACKEND=${S4_EIGEN_BACKEND}")
 endif()
 
+if(DEFINED S4_OUTPUT_DIR)
+    set(_s4_archive_out "${S4_OUTPUT_DIR}")
+else()
+    set(_s4_archive_out "${CMAKE_BINARY_DIR}")
+endif()
+
 set_target_properties(S4 PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build"
+    ARCHIVE_OUTPUT_DIRECTORY "${_s4_archive_out}"
     OUTPUT_NAME "S4"
 )
 
