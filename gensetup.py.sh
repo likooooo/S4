@@ -2,6 +2,8 @@
 
 OBJDIR="$1"
 LIBFILE="$2"
+BLAS_LIB="${BLAS_LIB:-/usr/lib/x86_64-linux-gnu/libblas.so.3}"
+LAPACK_LIB="${LAPACK_LIB:-/usr/lib/x86_64-linux-gnu/liblapack.so.3}"
 
 cat <<SETUPPY > setup.py
 from distutils.core import setup, Extension
@@ -12,11 +14,14 @@ S4module = Extension('S4',
 	],
 	libraries = [
 		'S4',
-		'stdc++'
+		'stdc++',
+		'gfortran'
 	],
 	library_dirs = ['$OBJDIR'],
 	extra_link_args = [
-		'$LIBFILE'
+		'$LIBFILE',
+		'$BLAS_LIB',
+		'$LAPACK_LIB'
 	]
 )
 

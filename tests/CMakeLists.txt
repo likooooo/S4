@@ -1,0 +1,6 @@
+add_executable(s4_backend_test_runner backend_test_main.cpp)
+target_include_directories(s4_backend_test_runner PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(s4_backend_test_runner PRIVATE S4)
+if(TARGET infrastructure::uca)
+    target_link_libraries(s4_backend_test_runner PRIVATE infrastructure::uca)
+endif()

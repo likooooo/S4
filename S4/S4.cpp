@@ -3533,6 +3533,11 @@ int Simulation_GetSMatrix(S4_Simulation *S, int from, int to, std::complex<doubl
 	return 0;
 }
 
+extern "C" int Simulation_GetSMatrixToBuffer(S4_Simulation *S, int from, int to, double *buffer){
+	if(NULL == buffer){ return -4; }
+	return Simulation_GetSMatrix(S, from, to, reinterpret_cast<std::complex<double>*>(buffer));
+}
+
 
 
 

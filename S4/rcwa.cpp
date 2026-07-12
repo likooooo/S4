@@ -31,10 +31,11 @@
 # include <TBLAS_ext.h>
 #endif
 #include <LinearSolve.h>
-#ifdef HAVE_LAPACK
+#include "eigen_backend.hpp"
+#if defined(S4_EIGEN_BACKEND_RNP)
 # include <LinearSolve_lapack.h>
-# include <Eigensystems_lapack.h>
-#else
+#endif
+#if !defined(S4_HAVE_LAPACK_EIGEN)
 # include <Eigensystems.h>
 #endif
 
@@ -57,7 +58,7 @@ static inline void rcwa_free(void *ptr){
 	free_aligned(ptr);
 }
 
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 	extern "C" void zgelss_(
 		const integer &m, const integer &n, const integer &nRHS,
 		std::complex<double> *a, const integer &lda,
@@ -72,7 +73,7 @@ static void SingularLinearSolve(
 	size_t m, size_t n, size_t nRHS, std::complex<double> *a, size_t lda,
 	std::complex<double> *b, size_t ldb, const double &rcond
 ){
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 	integer info, rank;
 	std::complex<double> dummy;
 	zgelss_(m, n, nRHS, a, lda, b, ldb, NULL, rcond, &rank, &dummy, -1, NULL, &info);
@@ -501,7 +502,7 @@ void SolveLayerEigensystem_uniform(
 	}
 }
 
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 void SolveLayerEigensystem_real(
 	double omega,
 	size_t n,
@@ -520,7 +521,7 @@ void SolveLayerEigensystem_real(
 
 	if((size_t)-1 == lwork){
 		double tmp;
-		RNP::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
+		s4_eigen::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
 		work_[0] = tmp + n2*n2;
 		return;
 	}else if(0 == lwork){
@@ -532,7 +533,7 @@ void SolveLayerEigensystem_real(
 	if(NULL == work_ || lwork < n2*n2+4*n2){
 		lwork = (size_t)-1;
 		double tmp;
-		RNP::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
+		s4_eigen::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
 		eigenlwork = (size_t)tmp;
 		work = (double*)rcwa_malloc(sizeof(double)*(eigenlwork + n2*n2));
 	}else{
@@ -626,7 +627,7 @@ void SolveLayerEigensystem_real(
 	}
 # endif
 #endif
-	int info = RNP::Eigensystem_real(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, eigenlwork);
+	int info = s4_eigen::Eigensystem_real(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, eigenlwork);
 	if(0 != info){
 		fprintf(stderr, "Layer eigensystem returned info = %d\n", info);
 	}
@@ -679,7 +680,7 @@ void SolveLayerEigensystem_real(
 	std::complex<double> *kp_use_actual = (NULL != kp ? kp : phi);
 	MakeKPMatrix(omega, n, kx, ky, Epsilon_inv, EPSILON2_TYPE_FULL, NULL, kp_use_actual, n2);
 }
-#endif // HAVE_LAPACK
+#endif // S4_HAVE_LAPACK_EIGEN
 
 void SolveLayerEigensystem(
 	std::complex<double> omega,
@@ -698,7 +699,7 @@ void SolveLayerEigensystem(
 ){
 	const size_t n2 = 2*n;
 	
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 	bool isreal = (n > 10);
 	for(size_t j = 0; j < n && isreal; ++j){
 		for(size_t i = 0; i < n; ++i){
@@ -727,18 +728,24 @@ void SolveLayerEigensystem(
 
 	if((size_t)-1 == lwork){
 		double dum;
-		RNP::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, work_, &dum, lwork);
+		s4_eigen::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, work_, &dum, lwork);
 		work_[0] += n2*n2;
 		return;
 	}else if(0 == lwork){
 		lwork = n2*n2+2*n2;
 	}
 
+	double *rwork = rwork_;
+	if(NULL == rwork_){
+		rwork = (double*)rcwa_malloc(sizeof(double)*2*n2);
+	}
+
 	std::complex<double> *work = work_;
 	size_t eigenlwork;
-	if(NULL == work_ || lwork < n2*n2+2*n2){
+	const bool work_owned = (NULL == work_ || lwork < n2*n2+2*n2);
+	if(work_owned){
 		lwork = (size_t)-1;
-		RNP::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, q, NULL, lwork);
+		s4_eigen::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, q, rwork, lwork);
 		eigenlwork = (size_t)q[0].real();
 		work = (std::complex<double>*)rcwa_malloc(sizeof(std::complex<double>)*(eigenlwork + n2*n2));
 	}else{
@@ -746,11 +753,6 @@ void SolveLayerEigensystem(
 	}
 	std::complex<double> *op = work;
 	std::complex<double> *eigenwork = op + n2*n2;
-
-	double *rwork = rwork_;
-	if(NULL == rwork_){
-		rwork = (double*)rcwa_malloc(sizeof(double)*2*n2);
-	}
 
 #ifdef DUMP_MATRICES
 	DUMP_STREAM << "kx:" << std::endl;
@@ -824,7 +826,7 @@ void SolveLayerEigensystem(
 	RNP::TBLAS::CopyMatrix<'A'>(n2,n2, op,n2, op_save,n2);
 # endif
 #endif
-	int info = RNP::Eigensystem(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, rwork, eigenlwork);
+	int info = s4_eigen::Eigensystem(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, rwork, eigenlwork);
 	if(0 != info){
 		fprintf(stderr, "Layer eigensystem returned info = %d\n", info);
 	}
@@ -871,7 +873,7 @@ void SolveLayerEigensystem(
 # endif
 #endif
 
-	if(NULL == work_ || lwork < n2*n2+2*n2){
+	if(work_owned){
 		rcwa_free(work);
 	}
 	if(NULL == rwork_){
