@@ -4,8 +4,9 @@
 #include <math.h>
 #include <float.h>
 #include "periodic_off2.h"
-#include <Cgeom/geom_circum.h>
-#include <Cgeom/geom_predicates.h>
+#include "geom_circum.h"
+
+extern double orient2d(const double *pa, const double *pb, const double *pc);
 
 static void skip(FILE *fp);
 
@@ -1121,7 +1122,7 @@ POFF2Mesh_Index POFF2Mesh_LocatePoint(
 					mesh->vertorg[ivo1].x,
 					mesh->vertorg[ivo1].y
 				};
-				if(geom_orient2d(v0, v1, q) < 0){
+				if(orient2d(v0, v1, q) < 0){
 					/* Flip over this halfedge now */
 					const int fhopp = 1 ^ fh;
 					if(mesh->half[fh].flag != mesh->half[fhopp].flag){
