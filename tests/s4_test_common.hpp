@@ -108,6 +108,24 @@ inline std::vector<pattern_case_spec> all_pattern_case_specs() {
     return out;
 }
 
+enum class li_josa_form { ref, pol_nv };
+
+struct li_josa_case_spec {
+    const char* name = nullptr;
+    li_josa_form form = li_josa_form::ref;
+    unsigned n_G = 100;
+    int resolution = 8;
+};
+
+inline std::vector<li_josa_case_spec> all_li_josa_case_specs() {
+    const li_josa_case_spec defaults{};
+    auto with = [&](li_josa_case_spec s) { return s; };
+    return {
+        with({.name = "li_josa_ref_nG100", .form = li_josa_form::ref}),
+        with({.name = "li_josa_pol_nv_nG100", .form = li_josa_form::pol_nv}),
+    };
+}
+
 }  // namespace s4_test
 
 #ifndef S4_TEST_COMMON_CATALOG_ONLY
@@ -393,12 +411,113 @@ inline void write_case_result(s4_dump::writer& w, const std::string& name, const
     }
 }
 
+struct li_josa_stack_case {
+    li_josa_form form = li_josa_form::ref;
+    unsigned n_G = 100;
+    int resolution = 8;
+    double wl_um = 1.0;
+    double period_um = 2.5;
+    double slab_depth_um = 1.0;
+    field_probe probe{.layer_index = 1, .z_offset = 0.5};
+};
+
+inline void apply_li_josa_options(S4_Simulation* S, li_josa_form form, int resolution) {
+    S->options.use_discretized_epsilon = 0;
+    S->options.use_subpixel_smoothing = 0;
+    S->options.use_polarization_basis = 0;
+    S->options.use_jones_vector_basis = 0;
+    S->options.use_normal_vector_basis = 0;
+    S->options.resolution = resolution;
+    switch (form) {
+    case li_josa_form::ref:
+        break;
+    case li_josa_form::pol_nv:
+        S->options.use_polarization_basis = 1;
+        S->options.use_normal_vector_basis = 1;
+        break;
+    }
+}
+
+inline li_josa_stack_case li_josa_stack_case_from_spec(const li_josa_case_spec& spec) {
+    li_josa_stack_case sc;
+    sc.form = spec.form;
+    sc.n_G = spec.n_G;
+    sc.resolution = spec.resolution;
+    return sc;
+}
+
+inline S4_Simulation* build_li_josa_cellA_simulation(const li_josa_stack_case& sc) {
+    S4_real Lr[4] = {static_cast<S4_real>(sc.period_um), 0, 0, static_cast<S4_real>(sc.period_um)};
+    S4_Simulation* S = S4_Simulation_New(Lr, sc.n_G, nullptr);
+    if (S == nullptr) {
+        throw std::runtime_error("S4_Simulation_New failed");
+    }
+    apply_li_josa_options(S, sc.form, sc.resolution);
+
+    set_scalar_material(S, "Dielectric", cT(2.25, 0));
+    set_scalar_material(S, "Vacuum", cT(1, 0));
+
+    const S4_real zero = 0;
+    const S4_real slab_depth = static_cast<S4_real>(sc.slab_depth_um);
+    S4_Simulation_SetLayer(S, -1, "Before", &zero, -1,
+                           S4_Simulation_GetMaterialByName(S, "Dielectric"));
+    S4_Simulation_SetLayer(S, -1, "Slab", &slab_depth, -1,
+                           S4_Simulation_GetMaterialByName(S, "Vacuum"));
+    const S4_LayerID slab_id = S4_Simulation_GetLayerByName(S, "Slab");
+    const S4_MaterialID die_mid = S4_Simulation_GetMaterialByName(S, "Dielectric");
+    const S4_real hw[2] = {static_cast<S4_real>(0.625), static_cast<S4_real>(0.625)};
+    const S4_real center0[2] = {static_cast<S4_real>(-0.625), static_cast<S4_real>(-0.625)};
+    const S4_real center1[2] = {static_cast<S4_real>(0.625), static_cast<S4_real>(0.625)};
+    const S4_real angle_frac[1] = {0};
+    S4_Layer_SetRegionHalfwidths(S, slab_id, die_mid, S4_REGION_TYPE_RECTANGLE, hw, center0,
+                                 angle_frac);
+    S4_Layer_SetRegionHalfwidths(S, slab_id, die_mid, S4_REGION_TYPE_RECTANGLE, hw, center1,
+                                 angle_frac);
+    S4_Simulation_SetLayer(S, -1, "After", &zero, -1,
+                           S4_Simulation_GetMaterialByName(S, "Vacuum"));
+
+    const S4_real angle[2] = {0, 0};
+    const S4_real pol_s[2] = {1.0, 0.0};
+    const S4_real pol_p[2] = {0.0, 0.0};
+    if (Simulation_MakeExcitationPlanewave(S, angle, pol_s, pol_p, 0) != 0) {
+        S4_Simulation_Destroy(S);
+        throw std::runtime_error("Simulation_MakeExcitationPlanewave failed");
+    }
+    const S4_real freq[2] = {1.0 / static_cast<S4_real>(sc.wl_um), 0.0};
+    if (S4_Simulation_SetFrequency(S, freq) != 0) {
+        S4_Simulation_Destroy(S);
+        throw std::runtime_error("S4_Simulation_SetFrequency failed");
+    }
+    return S;
+}
+
+inline case_result run_li_josa_case(const li_josa_stack_case& sc) {
+    S4_Simulation* S = build_li_josa_cellA_simulation(sc);
+    case_result out;
+    out.smatrix = fetch_smatrix(S);
+    double z_abs = 0;
+    static constexpr double k_depths[] = {0.0, 1.0, 0.0};
+    for (std::size_t li = 0; li < sc.probe.layer_index && li < 3; ++li) {
+        z_abs += k_depths[li];
+    }
+    z_abs += sc.probe.z_offset;
+    fetch_field_plane(S, z_abs, k_field_grid_nxy.data(), out.efield, out.hfield);
+    S4_Simulation_Destroy(S);
+    return out;
+}
+
 inline void register_all_cases(s4_dump::writer& w, const char* filter) {
     for (const pattern_case_spec& spec : all_pattern_case_specs()) {
         if (filter != nullptr && std::string(filter) != spec.name) {
             continue;
         }
         write_case_result(w, spec.name, run_stack_case(stack_case_from_spec(spec)));
+    }
+    for (const li_josa_case_spec& spec : all_li_josa_case_specs()) {
+        if (filter != nullptr && std::string(filter) != spec.name) {
+            continue;
+        }
+        write_case_result(w, spec.name, run_li_josa_case(li_josa_stack_case_from_spec(spec)));
     }
 }
 

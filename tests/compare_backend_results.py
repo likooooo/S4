@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import struct
 import sys
 from dataclasses import dataclass, field
@@ -89,13 +90,50 @@ def max_abs_diff(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.max(d)) if d.size else 0.0
 
 
-def compare_dumps(ref: DumpFile, other: DumpFile, tol: float) -> tuple[bool, list[dict]]:
+def parse_case_tols(specs: list[str]) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for spec in specs:
+        if "=" not in spec:
+            raise ValueError(f"invalid --case-tol {spec!r}; expected PATTERN=TOL")
+        pattern, tol_text = spec.rsplit("=", 1)
+        pattern = pattern.strip()
+        if not pattern:
+            raise ValueError(f"invalid --case-tol {spec!r}; empty pattern")
+        out[pattern] = float(tol_text.strip())
+    return out
+
+
+def tol_for_case(case: str, default_tol: float, case_tols: dict[str, float]) -> float:
+    if case in case_tols:
+        return case_tols[case]
+    best_tol = default_tol
+    matched = False
+    for pattern, tol in case_tols.items():
+        if fnmatch.fnmatch(case, pattern):
+            if not matched or tol > best_tol:
+                best_tol = tol
+                matched = True
+    return best_tol
+
+
+def compare_dumps(ref: DumpFile,
+                  other: DumpFile,
+                  tol: float,
+                  case_tols: dict[str, float] | None = None) -> tuple[bool, list[dict]]:
     rows: list[dict] = []
     ok = True
+    overrides = case_tols or {}
     all_cases = sorted(set(ref.cases) | set(other.cases))
     for case in all_cases:
+        case_tol = tol_for_case(case, tol, overrides)
         if case not in ref.cases or case not in other.cases:
-            rows.append({"case": case, "block": "*", "max_abs": float("inf"), "pass": False})
+            rows.append({
+                "case": case,
+                "block": "*",
+                "max_abs": float("inf"),
+                "tol": case_tol,
+                "pass": False,
+            })
             ok = False
             continue
         c_ref = ref.cases[case]
@@ -103,12 +141,24 @@ def compare_dumps(ref: DumpFile, other: DumpFile, tol: float) -> tuple[bool, lis
         all_blocks = sorted(set(c_ref.blocks) | set(c_other.blocks))
         for tag in all_blocks:
             if tag not in c_ref.blocks or tag not in c_other.blocks:
-                rows.append({"case": case, "block": tag, "max_abs": float("inf"), "pass": False})
+                rows.append({
+                    "case": case,
+                    "block": tag,
+                    "max_abs": float("inf"),
+                    "tol": case_tol,
+                    "pass": False,
+                })
                 ok = False
                 continue
             err = max_abs_diff(c_ref.blocks[tag].data, c_other.blocks[tag].data)
-            passed = err <= tol
-            rows.append({"case": case, "block": tag, "max_abs": err, "pass": passed})
+            passed = err <= case_tol
+            rows.append({
+                "case": case,
+                "block": tag,
+                "max_abs": err,
+                "tol": case_tol,
+                "pass": passed,
+            })
             ok &= passed
     return ok, rows
 
@@ -137,6 +187,13 @@ def main() -> int:
     parser.add_argument("reference", type=Path, help="Reference dump (typically RNP)")
     parser.add_argument("candidate", type=Path, help="Candidate dump (typically MEKIL)")
     parser.add_argument("--tol", type=float, default=1e-12)
+    parser.add_argument(
+        "--case-tol",
+        action="append",
+        default=[],
+        metavar="PATTERN=TOL",
+        help="Per-case tolerance override (fnmatch pattern); may be repeated",
+    )
     parser.add_argument("--visualize", action="store_true")
     parser.add_argument("--report", type=Path, default=None, help="Write text report")
     parser.add_argument("--viz-dir", type=Path, default=Path("s4_backend_compare_viz"))
@@ -144,17 +201,26 @@ def main() -> int:
 
     ref = read_dump(args.reference)
     cand = read_dump(args.candidate)
-    ok, rows = compare_dumps(ref, cand, args.tol)
+    case_tols = parse_case_tols(args.case_tol)
+    ok, rows = compare_dumps(ref, cand, args.tol, case_tols)
 
     lines = [
         f"reference: {args.reference} backend={ref.backend}",
         f"candidate: {args.candidate} backend={cand.backend}",
         f"tolerance: {args.tol:g}",
-        "",
     ]
+    if case_tols:
+        overrides = ", ".join(f"{pattern}={tol:g}" for pattern, tol in case_tols.items())
+        lines.append(f"case overrides: {overrides}")
+    lines.append("")
     for r in rows:
         status = "PASS" if r["pass"] else "FAIL"
-        lines.append(f"{status} case={r['case']} block={r['block']} max_abs={r['max_abs']:.6e}")
+        tol_note = ""
+        if r["tol"] != args.tol:
+            tol_note = f" tol={r['tol']:.6g}"
+        lines.append(
+            f"{status} case={r['case']} block={r['block']} max_abs={r['max_abs']:.6e}{tol_note}"
+        )
     text = "\n".join(lines)
     print(text)
     if args.report is not None:
