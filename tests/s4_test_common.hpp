@@ -277,10 +277,15 @@ inline void set_aniso_material(S4_Simulation* S,
                                cT c,
                                cT d,
                                cT e) {
-    S4_real eps[10] = {static_cast<S4_real>(a.real()), static_cast<S4_real>(a.imag()),
+    // Lab abcde (a,b,c,d,e)=(ε_xx,ε_xy,ε_yx,ε_yy,ε_zz).  S4 Epsilon2 top-left
+    // multiplies the Ey channel: embed lab → engine by swapping a↔d so Ey←ε_yy
+    // (same as simulation_core material::lab_abcde_to_s4_engine_abcde).
+    const cT a_eng = d;
+    const cT d_eng = a;
+    S4_real eps[10] = {static_cast<S4_real>(a_eng.real()), static_cast<S4_real>(a_eng.imag()),
                        static_cast<S4_real>(b.real()), static_cast<S4_real>(b.imag()),
                        static_cast<S4_real>(c.real()), static_cast<S4_real>(c.imag()),
-                       static_cast<S4_real>(d.real()), static_cast<S4_real>(d.imag()),
+                       static_cast<S4_real>(d_eng.real()), static_cast<S4_real>(d_eng.imag()),
                        static_cast<S4_real>(e.real()), static_cast<S4_real>(e.imag())};
     S4_Simulation_SetMaterial(S, -1, name, S4_MATERIAL_TYPE_XYTENSOR_COMPLEX, eps);
 }

@@ -116,13 +116,37 @@ def tol_for_case(case: str, default_tol: float, case_tols: dict[str, float]) -> 
     return best_tol
 
 
-def compare_dumps(ref: DumpFile,
-                  other: DumpFile,
-                  tol: float,
-                  case_tols: dict[str, float] | None = None) -> tuple[bool, list[dict]]:
+def parse_block_list(specs: list[str] | None) -> set[str] | None:
+    """Parse repeated CLI values that may themselves be comma-separated tags."""
+    if not specs:
+        return None
+    out: set[str] = set()
+    for spec in specs:
+        for part in spec.split(","):
+            tag = part.strip()
+            if tag:
+                out.add(tag)
+    return out or None
+
+
+def compare_dumps(
+    ref: DumpFile,
+    other: DumpFile,
+    tol: float,
+    case_tols: dict[str, float] | None = None,
+    hard_blocks: set[str] | None = None,
+    soft_blocks: set[str] | None = None,
+) -> tuple[bool, list[dict]]:
+    """Compare dump blocks.
+
+    - hard_blocks: if set, only these tags gate exit status (others ignored unless soft).
+    - soft_blocks: compared and reported but never fail the run.
+    - If hard_blocks is None, every non-soft block is a hard gate (legacy behavior).
+    """
     rows: list[dict] = []
     ok = True
     overrides = case_tols or {}
+    soft = soft_blocks or set()
     all_cases = sorted(set(ref.cases) | set(other.cases))
     for case in all_cases:
         case_tol = tol_for_case(case, tol, overrides)
@@ -133,6 +157,7 @@ def compare_dumps(ref: DumpFile,
                 "max_abs": float("inf"),
                 "tol": case_tol,
                 "pass": False,
+                "soft": False,
             })
             ok = False
             continue
@@ -140,6 +165,9 @@ def compare_dumps(ref: DumpFile,
         c_other = other.cases[case]
         all_blocks = sorted(set(c_ref.blocks) | set(c_other.blocks))
         for tag in all_blocks:
+            is_soft = tag in soft
+            if hard_blocks is not None and tag not in hard_blocks and not is_soft:
+                continue
             if tag not in c_ref.blocks or tag not in c_other.blocks:
                 rows.append({
                     "case": case,
@@ -147,8 +175,10 @@ def compare_dumps(ref: DumpFile,
                     "max_abs": float("inf"),
                     "tol": case_tol,
                     "pass": False,
+                    "soft": is_soft,
                 })
-                ok = False
+                if not is_soft:
+                    ok = False
                 continue
             err = max_abs_diff(c_ref.blocks[tag].data, c_other.blocks[tag].data)
             passed = err <= case_tol
@@ -158,8 +188,10 @@ def compare_dumps(ref: DumpFile,
                 "max_abs": err,
                 "tol": case_tol,
                 "pass": passed,
+                "soft": is_soft,
             })
-            ok &= passed
+            if not is_soft:
+                ok &= passed
     return ok, rows
 
 
@@ -194,6 +226,22 @@ def main() -> int:
         metavar="PATTERN=TOL",
         help="Per-case tolerance override (fnmatch pattern); may be repeated",
     )
+    parser.add_argument(
+        "--blocks",
+        action="append",
+        default=[],
+        metavar="TAG[,TAG...]",
+        help="Hard-gate only these blocks (comma-separated; may be repeated). "
+        "Other blocks are ignored unless listed in --soft-blocks.",
+    )
+    parser.add_argument(
+        "--soft-blocks",
+        action="append",
+        default=[],
+        metavar="TAG[,TAG...]",
+        help="Compare and report these blocks but never fail the exit code "
+        "(product RCWA field ledger vs upstream S4 dump).",
+    )
     parser.add_argument("--visualize", action="store_true")
     parser.add_argument("--report", type=Path, default=None, help="Write text report")
     parser.add_argument("--viz-dir", type=Path, default=Path("s4_backend_compare_viz"))
@@ -202,7 +250,11 @@ def main() -> int:
     ref = read_dump(args.reference)
     cand = read_dump(args.candidate)
     case_tols = parse_case_tols(args.case_tol)
-    ok, rows = compare_dumps(ref, cand, args.tol, case_tols)
+    hard_blocks = parse_block_list(args.blocks)
+    soft_blocks = parse_block_list(args.soft_blocks) or set()
+    ok, rows = compare_dumps(
+        ref, cand, args.tol, case_tols, hard_blocks=hard_blocks, soft_blocks=soft_blocks
+    )
 
     lines = [
         f"reference: {args.reference} backend={ref.backend}",
@@ -212,9 +264,16 @@ def main() -> int:
     if case_tols:
         overrides = ", ".join(f"{pattern}={tol:g}" for pattern, tol in case_tols.items())
         lines.append(f"case overrides: {overrides}")
+    if hard_blocks is not None:
+        lines.append("hard blocks: " + ", ".join(sorted(hard_blocks)))
+    if soft_blocks:
+        lines.append("soft blocks: " + ", ".join(sorted(soft_blocks)))
     lines.append("")
     for r in rows:
-        status = "PASS" if r["pass"] else "FAIL"
+        if r.get("soft"):
+            status = "SOFT-PASS" if r["pass"] else "SOFT-FAIL"
+        else:
+            status = "PASS" if r["pass"] else "FAIL"
         tol_note = ""
         if r["tol"] != args.tol:
             tol_note = f" tol={r['tol']:.6g}"
