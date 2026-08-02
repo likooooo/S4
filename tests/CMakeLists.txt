@@ -4,3 +4,8 @@ target_link_libraries(s4_backend_test_runner PRIVATE S4)
 if(TARGET infrastructure::uca)
     target_link_libraries(s4_backend_test_runner PRIVATE infrastructure::uca)
 endif()
+# Infra (uca/mekil) is ASAN-instrumented when ENABLE_ASAN; this runner must link the same runtime.
+if(ENABLE_ASAN)
+    target_compile_options(s4_backend_test_runner PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+    target_link_options(s4_backend_test_runner PRIVATE -fsanitize=address)
+endif()
