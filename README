@@ -4,7 +4,34 @@ A program for computing electromagnetic fields in periodic, layered
 structures, developed by Victor Liu (victorliu@alumni.stanford.edu) of the
 Fan group in the Stanford Electrical Engineering Department.
 
-See the S4 manual, in doc/index.html, for a complete
-description of the package and its user interface, as well as
-installation instructions, the license and copyright, contact
-addresses, and other important information.
+## Documentation
+
+- Markdown overview: `doc/index.md` (and sibling `doc/*.md`)
+- Upstream Sphinx sources: `doc/source/*.rst` (historical; Makefile/Lua/Python install paths)
+- Legacy HTML snapshot: `docold/index.html` (not maintained)
+
+There is **no** `doc/index.html` in this tree unless you build Sphinx yourself.
+
+## simulation_core integration (this fork)
+
+Parent `simulation_core` builds S4 via CMake (`add_subdirectory(3rdparty/S4)`):
+
+- Always builds **`S4_bridge`** (C API in `S4/s4_bridge.h`) and links it into `simulation`.
+- Full static **`S4`** library and S4 tests build only when parent enables MKL
+  (`-DCMAKE_ENABLE_MKL=ON` / `build_simulation.py --mkl on`).
+- Default eigen backend: `S4_EIGEN_BACKEND=MEKIL` (uses `infrastructure::uca`).
+
+Stable surface for parent code: **`s4_bridge_*`** + `include/layer/s4_bridge_adapt.hpp`,
+not the Lua/Python front-ends described in upstream docs.
+
+Build from `simulation_core`:
+
+```bash
+source scripts/init-simulation-build-env.sh build
+python3 scripts/build_simulation.py --mkl on   # full S4 + bridge
+```
+
+Optional legacy Python package path (not CI): parent
+`scripts/build_install_s4_python.sh` — do not confuse with the CMake `S4_bridge` path.
+
+Upstream install/dev notes in `doc/source/install.rst` remain historical.
