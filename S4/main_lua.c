@@ -2186,7 +2186,7 @@ static int S4L_Simulation_GetAmplitudes(lua_State *L){
 
 	layer_name = luaL_checklstring(L, 2, NULL);
 	layer = S4_Simulation_GetLayerByName(S, layer_name);
-	if(NULL == layer){
+	if(layer < 0){
 		S4L_error(L, "GetAmplitudes: S4_Layer named '%s' not found.", layer_name);
 		return 0;
 	}
@@ -2204,7 +2204,7 @@ static int S4L_Simulation_GetAmplitudes(lua_State *L){
 
 	amp = (double*)malloc(sizeof(double)*8*n);
 	Simulation_GetAmplitudes(S,
-		layer,
+		&S->layer[layer],
 		luaL_checknumber(L, 3),
 		amp, &amp[4*n]);
 

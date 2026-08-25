@@ -31,7 +31,8 @@ source scripts/init-simulation-build-env.sh build
 python3 scripts/build_simulation.py --mkl on   # full S4 + bridge
 ```
 
-Optional legacy Python package path (not CI): parent
-`scripts/build_install_s4_python.sh` — do not confuse with the CMake `S4_bridge` path.
+RCWA baseline (Lua, not CI): parent `scripts/build_install_s4_lua.sh` builds `S4lua`
+linked to MEKIL `libS4`. Optional legacy Python path `scripts/build_install_s4_python.sh`
+is unmaintained — do not confuse with `S4_bridge` or `S4lua`.
 
 Upstream install/dev notes in `doc/source/install.rst` remain historical.
