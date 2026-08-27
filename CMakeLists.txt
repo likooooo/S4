@@ -176,7 +176,7 @@ if(S4_ENABLE_LUA)
         ${CMAKE_CURRENT_SOURCE_DIR}/S4/kiss_fft
         ${S4_LUA_INCLUDE_DIRS}
     )
-    target_compile_options(S4lua PRIVATE -O3 -Wall -march=native -fcx-limited-range -fPIC)
+    target_compile_options(S4lua PRIVATE -O3 -Wall -Wno-unused-variable -Wno-unused-function -march=native -fcx-limited-range -fPIC)
     target_compile_definitions(S4lua PRIVATE HAVE_BLAS _USE_MATH_DEFINES)
     target_link_libraries(S4lua PRIVATE S4 ${S4_LUA_LINK_LIBS} dl m stdc++)
     set_target_properties(S4lua PROPERTIES

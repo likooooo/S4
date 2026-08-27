@@ -126,6 +126,70 @@ inline std::vector<li_josa_case_spec> all_li_josa_case_specs() {
     };
 }
 
+enum class discretized_method { fft, kottke };
+
+struct discretized_case_spec {
+    const char* name = nullptr;
+    pattern_shape_kind shape = pattern_shape_kind::tri;
+    discretized_method method = discretized_method::fft;
+    unsigned n_G = 9;
+    int resolution = 8;
+    bool pol_nv = false;
+    double phi_deg = 20.0;
+    double theta_deg = 0.0;
+    char pol = 'p';
+    std::size_t probe_layer_index = 2;
+    double probe_z_um = 0.004;
+};
+
+inline std::vector<discretized_case_spec> all_discretized_case_specs() {
+    const discretized_case_spec defaults{};
+    auto spec = [&](const char* name, pattern_shape_kind shape, discretized_method method) {
+        discretized_case_spec s = defaults;
+        s.name = name;
+        s.shape = shape;
+        s.method = method;
+        return s;
+    };
+    auto with = [&](discretized_case_spec s) { return s; };
+    std::vector<discretized_case_spec> out;
+    out.push_back(spec("disc_fft_tri_nG9", pattern_shape_kind::tri, discretized_method::fft));
+    out.push_back(spec("disc_fft_rect_nG9", pattern_shape_kind::rect, discretized_method::fft));
+    out.push_back(spec("disc_fft_circle_nG9", pattern_shape_kind::circle, discretized_method::fft));
+    out.push_back(spec("disc_kottke_tri_nG9", pattern_shape_kind::tri, discretized_method::kottke));
+    out.push_back(spec("disc_kottke_rect_nG9", pattern_shape_kind::rect, discretized_method::kottke));
+    out.push_back(spec("disc_kottke_circle_nG9", pattern_shape_kind::circle, discretized_method::kottke));
+    out.push_back(with({.name = "disc_fft_pol_tri_nG9",
+                        .shape = pattern_shape_kind::tri,
+                        .method = discretized_method::fft,
+                        .pol_nv = true}));
+    out.push_back(with({.name = "disc_fft_pol_rect_nG9",
+                        .shape = pattern_shape_kind::rect,
+                        .method = discretized_method::fft,
+                        .pol_nv = true}));
+    return out;
+}
+
+inline pattern_case_spec pattern_spec_from_discretized(const discretized_case_spec& spec) {
+    pattern_case_spec out{};
+    out.name = spec.name;
+    out.shape = spec.shape;
+    out.n_G = spec.n_G;
+    out.phi_deg = spec.phi_deg;
+    out.theta_deg = spec.theta_deg;
+    out.pol = spec.pol;
+    out.probe_layer_index = spec.probe_layer_index;
+    out.probe_z_um = spec.probe_z_um;
+    return out;
+}
+
+inline bool discretized_case_matches_filter(const discretized_case_spec& spec, const char* case_filter,
+                                            const discretized_method* method_filter) {
+    if (case_filter != nullptr && std::string(case_filter) != spec.name) return false;
+    if (method_filter != nullptr && spec.method != *method_filter) return false;
+    return true;
+}
+
 }  // namespace s4_test
 
 #ifndef S4_TEST_COMMON_CATALOG_ONLY
@@ -509,6 +573,35 @@ inline case_result run_li_josa_case(const li_josa_stack_case& sc) {
     fetch_field_plane(S, z_abs, k_field_grid_nxy.data(), out.efield, out.hfield);
     S4_Simulation_Destroy(S);
     return out;
+}
+
+inline void apply_discretized_options(S4_Simulation* S, const discretized_case_spec& spec) {
+    S->options.use_discretized_epsilon = 1;
+    S->options.use_subpixel_smoothing = (spec.method == discretized_method::kottke) ? 1 : 0;
+    S->options.resolution = spec.resolution;
+    S->options.use_polarization_basis = spec.pol_nv ? 1 : 0;
+    S->options.use_jones_vector_basis = 0;
+    S->options.use_normal_vector_basis = spec.pol_nv ? 1 : 0;
+}
+
+inline case_result run_discretized_case(const discretized_case_spec& spec) {
+    stack_case sc = stack_case_from_spec(pattern_spec_from_discretized(spec));
+    S4_Simulation* S = build_pattern_stack_simulation(sc);
+    apply_discretized_options(S, spec);
+    case_result out;
+    out.smatrix = fetch_smatrix(S);
+    const double z_abs = absolute_z_for_probe(sc, sc.probe.z_offset);
+    fetch_field_plane(S, z_abs, k_field_grid_nxy.data(), out.efield, out.hfield);
+    S4_Simulation_Destroy(S);
+    return out;
+}
+
+inline void register_discretized_cases(s4_dump::writer& w, const char* filter,
+                                       const discretized_method* method_filter) {
+    for (const discretized_case_spec& spec : all_discretized_case_specs()) {
+        if (!discretized_case_matches_filter(spec, filter, method_filter)) continue;
+        write_case_result(w, spec.name, run_discretized_case(spec));
+    }
 }
 
 inline void register_all_cases(s4_dump::writer& w, const char* filter) {
