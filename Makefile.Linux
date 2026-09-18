@@ -9,8 +9,8 @@ LUA_MODULE_LIB =
 MPI_INC =
 MPI_LIB =
 
-CFLAGS   += -O3 -Wall -march=native -fcx-limited-range -fno-exceptions -fPIC
-CXXFLAGS += -O3 -Wall -march=native -fcx-limited-range -fno-exceptions -fPIC
+CFLAGS   += -O3 -Wall -fcx-limited-range -fno-exceptions -fPIC
+CXXFLAGS += -O3 -Wall -fcx-limited-range -fno-exceptions -fPIC
 
 # If compiling with MPI, the following must be modified to the proper MPI compilers
 CC = gcc

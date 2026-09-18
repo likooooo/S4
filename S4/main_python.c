@@ -982,12 +982,16 @@ static PyObject *S4Sim_SetExcitationPlanewave(S4Sim *self, PyObject *args, PyObj
 
 static PyObject *S4Sim_SetFrequency(S4Sim *self, PyObject *args){
 	Py_complex f;
+	double freq[2];
 	if(!PyArg_ParseTuple(args, "D:SetFrequency", &f)){ return NULL; }
 
-	Simulation_DestroySolution(self->S);
-
-	self->S->omega[0] = 2*M_PI*f.real;
-	self->S->omega[1] = 2*M_PI*f.imag;
+	/* Must match S4_Simulation_SetFrequency: destroy layer modes + solution +
+	 * field cache. Destroying only the solution leaves cached LayerModes from
+	 * the previous omega, so subsequent GetPoyntingFlux rebuilds with stale
+	 * modes while power formulas use the new omega (T appears frozen; fa∝1/f). */
+	freq[0] = f.real;
+	freq[1] = f.imag;
+	S4_Simulation_SetFrequency(self->S, freq);
 	if(self->S->omega[0] <= 0){
 		PyErr_Warn(PyExc_RuntimeWarning, "A non-positive frequency was specified.");
 	}

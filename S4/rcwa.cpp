@@ -31,10 +31,11 @@
 # include <TBLAS_ext.h>
 #endif
 #include <LinearSolve.h>
-#ifdef HAVE_LAPACK
+#include "eigen_backend.hpp"
+#if defined(S4_EIGEN_BACKEND_RNP)
 # include <LinearSolve_lapack.h>
-# include <Eigensystems_lapack.h>
-#else
+#endif
+#if !defined(S4_HAVE_LAPACK_EIGEN)
 # include <Eigensystems.h>
 #endif
 
@@ -57,7 +58,7 @@ static inline void rcwa_free(void *ptr){
 	free_aligned(ptr);
 }
 
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 	extern "C" void zgelss_(
 		const integer &m, const integer &n, const integer &nRHS,
 		std::complex<double> *a, const integer &lda,
@@ -72,15 +73,20 @@ static void SingularLinearSolve(
 	size_t m, size_t n, size_t nRHS, std::complex<double> *a, size_t lda,
 	std::complex<double> *b, size_t ldb, const double &rcond
 ){
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 	integer info, rank;
 	std::complex<double> dummy;
-	zgelss_(m, n, nRHS, a, lda, b, ldb, NULL, rcond, &rank, &dummy, -1, NULL, &info);
-	integer lwork = (integer)dummy.real();
-	std::complex<double> *work = (std::complex<double>*)rcwa_malloc(sizeof(std::complex<double>) * lwork);
+	const integer m_i = static_cast<integer>(m);
+	const integer n_i = static_cast<integer>(n);
+	const integer nRHS_i = static_cast<integer>(nRHS);
+	const integer lda_i = static_cast<integer>(lda);
+	const integer ldb_i = static_cast<integer>(ldb);
+	zgelss_(m_i, n_i, nRHS_i, a, lda_i, b, ldb_i, NULL, rcond, &rank, &dummy, -1, NULL, &info);
+	integer lwork = static_cast<integer>(dummy.real());
+	std::complex<double> *work = (std::complex<double>*)rcwa_malloc(sizeof(std::complex<double>) * static_cast<size_t>(lwork));
 	double *rwork = (double*)rcwa_malloc(sizeof(double) * 6*m);
 
-	zgelss_(m, n, nRHS, a, lda, b, ldb, rwork, rcond, &rank, work, lwork, rwork+m, &info);
+	zgelss_(m_i, n_i, nRHS_i, a, lda_i, b, ldb_i, rwork, rcond, &rank, work, lwork, rwork+m, &info);
 
 	rcwa_free(rwork);
 	rcwa_free(work);
@@ -172,50 +178,67 @@ static void ZeroMatrix(int m, int n, T *a, int lda){
 		}
 	}
 }
+#if defined(HAVE_BLAS) && !defined(S4_HAVE_LAPACK_EIGEN)
+# if defined(MEKIL_HAVE_MKL) && MEKIL_HAVE_MKL
+#  ifdef MKL_ILP64
+typedef long long int integer;
+#  else
+typedef int integer;
+#  endif
+# else
+typedef int integer;
+# endif
+#endif
 extern "C" void zgemv_(
-	const char *trans, const int &m, const int &n, const std::complex<double> &alpha,
-	const std::complex<double> *a, const int &lda, const std::complex<double> *x, const int &incx,
-	const std::complex<double> &beta, std::complex<double> *y, const int &incy
+	const char *trans, const integer &m, const integer &n, const std::complex<double> &alpha,
+	const std::complex<double> *a, const integer &lda, const std::complex<double> *x, const integer &incx,
+	const std::complex<double> &beta, std::complex<double> *y, const integer &incy
 );
 extern "C" void zgemm_(
-	const char *transa, const char *transb, const int &m, const int &n, const int &k,
-	const std::complex<double> &alpha, const std::complex<double> *a, const int &lda,
-	const std::complex<double> *b, const int &ldb,
-	const std::complex<double> &beta, std::complex<double> *c, const int &ldc
+	const char *transa, const char *transb, const integer &m, const integer &n, const integer &k,
+	const std::complex<double> &alpha, const std::complex<double> *a, const integer &lda,
+	const std::complex<double> *b, const integer &ldb,
+	const std::complex<double> &beta, std::complex<double> *c, const integer &ldc
 );
 extern "C" void zgetrf_(
-	const int &m, const int &n, std::complex<double> *a, const int &lda, int *ipiv, int *info
+	const integer &m, const integer &n, std::complex<double> *a, const integer &lda, integer *ipiv, integer *info
 );
 extern "C" void zgetrs_(
-	const char *trans, const int &n, const int &nrhs, const std::complex<double> *a, const int &lda,
-	const int *ipiv, std::complex<double> *b, const int &ldb, int *info
+	const char *trans, const integer &n, const integer &nrhs, const std::complex<double> *a, const integer &lda,
+	const integer *ipiv, std::complex<double> *b, const integer &ldb, integer *info
 );
 extern "C" void zgetri_(
-	const int &n, const std::complex<double> *a, const int &lda,
-	const int *ipiv, std::complex<double> *work, const int &lwork, int *info
+	const integer &n, std::complex<double> *a, const integer &lda,
+	const integer *ipiv, std::complex<double> *work, const integer &lwork, integer *info
 );
 static int Invert(size_t n, std::complex<double> *a, size_t lda, std::complex<double> *work, size_t lwork, size_t *iwork){
-	int info;
-	zgetrf_(n, n, a, lda, (int*)iwork, &info);
-	zgetri_(n, a, lda, (int*)iwork, work, lwork, &info);
-	return info;
+	integer info;
+	const integer n_i = static_cast<integer>(n);
+	const integer lda_i = static_cast<integer>(lda);
+	const integer lwork_i = static_cast<integer>(lwork);
+	zgetrf_(n_i, n_i, a, lda_i, reinterpret_cast<integer*>(iwork), &info);
+	zgetri_(n_i, a, lda_i, reinterpret_cast<integer*>(iwork), work, lwork_i, &info);
+	return static_cast<int>(info);
 }
 
 static void Mult(size_t n, const double &alpha, const std::complex<double> *a, size_t lda, std::complex<double> *b, size_t ldb, const double &beta, std::complex<double> *c, size_t ldc){
-	zgemm_("N","N", n, n, n, alpha, a, lda, b, ldb, beta, c, ldc);
+	const integer n_i = static_cast<integer>(n);
+	zgemm_("N","N", n_i, n_i, n_i, alpha, a, static_cast<integer>(lda), b, static_cast<integer>(ldb), beta, c, static_cast<integer>(ldc));
 }
 static void Mult(size_t n, size_t m, const double &alpha, const std::complex<double> *a, size_t lda, std::complex<double> *b, const double &beta, std::complex<double> *c){
-	zgemv_("N", n, m, alpha, a, lda, b, 1, beta, c, 1);
+	zgemv_("N", static_cast<integer>(n), static_cast<integer>(m), alpha, a, static_cast<integer>(lda), b, 1, beta, c, 1);
 }
 static int LUFactor(size_t n, std::complex<double> *a, size_t lda, size_t *ipiv){
-	int info = 0;
-	zgetrf_(n, n, a, lda, (int*)ipiv, &info); // A = P*L*U
-	return info;
+	integer info = 0;
+	const integer n_i = static_cast<integer>(n);
+	zgetrf_(n_i, n_i, a, static_cast<integer>(lda), reinterpret_cast<integer*>(ipiv), &info);
+	return static_cast<int>(info);
 }
 static int LUSolve(size_t n, size_t nRHS, const std::complex<double> *a, size_t lda, const size_t *ipiv, std::complex<double> *b, size_t ldb){
-	int info;
-	zgetrs_("N", n, nRHS, a, lda, (const int*)ipiv, b, ldb, &info);
-	return info;
+	integer info;
+	const integer n_i = static_cast<integer>(n);
+	zgetrs_("N", n_i, static_cast<integer>(nRHS), a, static_cast<integer>(lda), reinterpret_cast<const integer*>(ipiv), b, static_cast<integer>(ldb), &info);
+	return static_cast<int>(info);
 }
 static void PrintMatrix(const char *name, size_t m, size_t n, const std::complex<double> *a, size_t lda){
 	printf("%s = [\n", name);
@@ -501,7 +524,7 @@ void SolveLayerEigensystem_uniform(
 	}
 }
 
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 void SolveLayerEigensystem_real(
 	double omega,
 	size_t n,
@@ -520,7 +543,7 @@ void SolveLayerEigensystem_real(
 
 	if((size_t)-1 == lwork){
 		double tmp;
-		RNP::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
+		s4_eigen::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
 		work_[0] = tmp + n2*n2;
 		return;
 	}else if(0 == lwork){
@@ -532,7 +555,7 @@ void SolveLayerEigensystem_real(
 	if(NULL == work_ || lwork < n2*n2+4*n2){
 		lwork = (size_t)-1;
 		double tmp;
-		RNP::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
+		s4_eigen::Eigensystem_real(n2, NULL, n2, q, NULL, 1, phi, n2, &tmp, lwork);
 		eigenlwork = (size_t)tmp;
 		work = (double*)rcwa_malloc(sizeof(double)*(eigenlwork + n2*n2));
 	}else{
@@ -626,7 +649,7 @@ void SolveLayerEigensystem_real(
 	}
 # endif
 #endif
-	int info = RNP::Eigensystem_real(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, eigenlwork);
+	int info = s4_eigen::Eigensystem_real(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, eigenlwork);
 	if(0 != info){
 		fprintf(stderr, "Layer eigensystem returned info = %d\n", info);
 	}
@@ -679,7 +702,7 @@ void SolveLayerEigensystem_real(
 	std::complex<double> *kp_use_actual = (NULL != kp ? kp : phi);
 	MakeKPMatrix(omega, n, kx, ky, Epsilon_inv, EPSILON2_TYPE_FULL, NULL, kp_use_actual, n2);
 }
-#endif // HAVE_LAPACK
+#endif // S4_HAVE_LAPACK_EIGEN
 
 void SolveLayerEigensystem(
 	std::complex<double> omega,
@@ -698,7 +721,7 @@ void SolveLayerEigensystem(
 ){
 	const size_t n2 = 2*n;
 	
-#ifdef HAVE_LAPACK
+#ifdef S4_HAVE_LAPACK_EIGEN
 	bool isreal = (n > 10);
 	for(size_t j = 0; j < n && isreal; ++j){
 		for(size_t i = 0; i < n; ++i){
@@ -727,18 +750,24 @@ void SolveLayerEigensystem(
 
 	if((size_t)-1 == lwork){
 		double dum;
-		RNP::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, work_, &dum, lwork);
+		s4_eigen::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, work_, &dum, lwork);
 		work_[0] += n2*n2;
 		return;
 	}else if(0 == lwork){
 		lwork = n2*n2+2*n2;
 	}
 
+	double *rwork = rwork_;
+	if(NULL == rwork_){
+		rwork = (double*)rcwa_malloc(sizeof(double)*2*n2);
+	}
+
 	std::complex<double> *work = work_;
 	size_t eigenlwork;
-	if(NULL == work_ || lwork < n2*n2+2*n2){
+	const bool work_owned = (NULL == work_ || lwork < n2*n2+2*n2);
+	if(work_owned){
 		lwork = (size_t)-1;
-		RNP::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, q, NULL, lwork);
+		s4_eigen::Eigensystem(n2, NULL, n2, q, NULL, 1, phi, n2, q, rwork, lwork);
 		eigenlwork = (size_t)q[0].real();
 		work = (std::complex<double>*)rcwa_malloc(sizeof(std::complex<double>)*(eigenlwork + n2*n2));
 	}else{
@@ -746,11 +775,6 @@ void SolveLayerEigensystem(
 	}
 	std::complex<double> *op = work;
 	std::complex<double> *eigenwork = op + n2*n2;
-
-	double *rwork = rwork_;
-	if(NULL == rwork_){
-		rwork = (double*)rcwa_malloc(sizeof(double)*2*n2);
-	}
 
 #ifdef DUMP_MATRICES
 	DUMP_STREAM << "kx:" << std::endl;
@@ -824,7 +848,7 @@ void SolveLayerEigensystem(
 	RNP::TBLAS::CopyMatrix<'A'>(n2,n2, op,n2, op_save,n2);
 # endif
 #endif
-	int info = RNP::Eigensystem(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, rwork, eigenlwork);
+	int info = s4_eigen::Eigensystem(n2, op, n2, q, NULL, 1, phi, n2, eigenwork, rwork, eigenlwork);
 	if(0 != info){
 		fprintf(stderr, "Layer eigensystem returned info = %d\n", info);
 	}
@@ -871,7 +895,7 @@ void SolveLayerEigensystem(
 # endif
 #endif
 
-	if(NULL == work_ || lwork < n2*n2+2*n2){
+	if(work_owned){
 		rcwa_free(work);
 	}
 	if(NULL == rwork_){

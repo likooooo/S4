@@ -6,8 +6,8 @@ LUA_INC =
 LUA_LIB = -Wl,-Bdynamic -llua -Wl,-Bstatic
 LUA_MODULE_LIB = -DLUA_BUILD_AS_DLL -Wl,-Bdynamic -llua.dll -Wl,-Bstatic
 
-CFLAGS += -DHAVE_BLAS -DHAVE_LAPACK -O2 -Wall -march=native -fcx-limited-range -fno-exceptions -static
-#CFLAGS += -g -O0 -DHAVE_BLAS -DHAVE_LAPACK -Wall -march=native -fcx-limited-range -fno-exceptions -DENABLE_S4_TRACE -DDUMP_MATRICES -DDUMP_MATRICES_LARGE
+CFLAGS += -DHAVE_BLAS -DHAVE_LAPACK -O2 -Wall -fcx-limited-range -fno-exceptions -static
+#CFLAGS += -g -O0 -DHAVE_BLAS -DHAVE_LAPACK -Wall -fcx-limited-range -fno-exceptions -DENABLE_S4_TRACE -DDUMP_MATRICES -DDUMP_MATRICES_LARGE
 CXXFLAGS = $(CFLAGS)
 
 CC = gcc

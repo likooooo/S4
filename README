@@ -4,7 +4,64 @@ A program for computing electromagnetic fields in periodic, layered
 structures, developed by Victor Liu (victorliu@alumni.stanford.edu) of the
 Fan group in the Stanford Electrical Engineering Department.
 
-See the S4 manual, in doc/index.html, for a complete
-description of the package and its user interface, as well as
-installation instructions, the license and copyright, contact
-addresses, and other important information.
+## Documentation
+
+- Markdown overview: `doc/index.md` (and sibling `doc/*.md`)
+- Upstream Sphinx sources: `doc/source/*.rst` (historical; Makefile/Lua/Python install paths)
+- Legacy HTML snapshot: `docold/index.html` (not maintained)
+
+There is **no** `doc/index.html` in this tree unless you build Sphinx yourself.
+
+## simulation_core integration (this fork)
+
+Parent `simulation_core` builds S4 via CMake (`add_subdirectory(3rdparty/S4)`):
+
+- Always builds **`S4_bridge`** (C API in `S4/s4_bridge.h`) and links it into `simulation`.
+- Full static **`S4`** library and S4 tests build only when parent enables MKL
+  (`-DCMAKE_ENABLE_MKL=ON` / `build_simulation.py --mkl on`).
+- Default eigen backend: `S4_EIGEN_BACKEND=MEKIL` (uses `infrastructure::uca`).
+
+Stable surface for parent code: **`s4_bridge_*`** + `include/layer/s4_bridge_adapt.hpp`,
+not the Lua/Python front-ends described in upstream docs.
+
+Build from `simulation_core`:
+
+```bash
+# from simulation_core root; see docs/sop_windows_env.md / build_simulation.py
+python3 scripts/build_simulation.py --mkl on   # full S4 + bridge
+```
+
+## s4_lua runtime publish (unique channel)
+
+Product `s4_lua` is published **only** via `scripts/` entries in this tree (impl in
+`scripts/_lib/`; same style as `simulation_vl_plugin`). Do not add a second publish path in core CI or other repos.
+
+### Formal entries（与 simulation_vl_plugin / simulation_core 同形）
+
+| 入口 | 作用 |
+|---|---|
+| `scripts/ci_release.py` | 质量门：本机平台编 S4lua → `out/build`（含 smoke） |
+| `scripts/ci_release_products.py` | 上架：build → stage → pack → publish |
+
+- Platforms: `linux-x86_64` / `win-x86_64`（由本机推断；无 Python ABI suffix）
+- Package contents: `S4lua` binary only; MKL stays on the runner
+- Disk: `runtime-root/objects/s4_lua/<platform>/<12hex>/{manifest.json,package.simdb}`
+  plus `refs/s4_lua/<platform>/{trial,release}`（指针一行 = **12hex**；`channel=trial` 只写 trial，`release` 写两指针）
+- Pack: **C++** `pack_package_bytes`；正式入口只走稳定
+  `https://www.simulationtoolkits.com/downloads/release/simdb_cli-<host>-cp312.zip`
+  （禁止 `--cli-root`）。无本地 `runtime_format.py` / AES。
+- channel：本仓 HEAD subject 以 `release` 开头 → `release`，否则 `trial`
+- 写死：`ssh=aliyun`、`runtime-root=/home/like/simdb/runtime-root`
+
+```bash
+export SIMULATION_DATABASE_KEY=…   # required for pack
+python3 scripts/ci_release.py
+python3 scripts/ci_release_products.py
+```
+
+Win: 同一对 `ci_*` 在 Windows 主机上跑（`$PROFILE` 提供 `VCVARS64` + `MKLROOT`；MSVC + Ninja）。
+The build supplies a small `S4/win/getopt` shim and maps `strcasecmp`/`strdup` for MSVC.
+
+排障可调 `build.py` / `release_products.py`（带参；pack/publish 在 `scripts/_lib/`）；正式发布只走上面两个 `ci_*`。
+
+Upstream install/dev notes in `doc/source/install.rst` remain historical.

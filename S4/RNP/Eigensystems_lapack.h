@@ -9,7 +9,15 @@
 # define RNP_FORTRAN_NAME(LCASE,UCASE) F77_FUNC(LCASE,UCASE)
 #endif
 
+#if defined(MEKIL_HAVE_MKL) && MEKIL_HAVE_MKL
+# ifdef MKL_ILP64
+typedef long long int integer;
+# else
 typedef int integer;
+# endif
+#else
+typedef int integer;
+#endif
 
 extern "C" void RNP_FORTRAN_NAME(zgeev,ZGEEV)(const char *jobvl, const char *jobvr, const integer &n, 
 	std::complex<double> *a, const integer &lda, std::complex<double> *w, std::complex<double> *vl, 

@@ -143,6 +143,7 @@ S4r_LIBOBJS = \
 	$(OBJDIR)/S4r/IRA.o \
 	$(OBJDIR)/S4r/intersection.o \
 	$(OBJDIR)/S4r/predicates.o \
+	$(OBJDIR)/S4r/geom_circum.o \
 	$(OBJDIR)/S4r/periodic_off2.o
 
 ifndef LAPACK_LIB
@@ -230,7 +231,9 @@ $(OBJDIR)/S4r/IRA.o: S4r/IRA.cpp S4r/IRA.hpp S4r/Types.hpp
 	$(CXX) -c $(CFLAGS) $(CPPFLAGS) -I. $< -o $@
 $(OBJDIR)/S4r/intersection.o: S4r/intersection.c S4r/intersection.h
 	$(CC) -c -O3 $< -o $@
-$(OBJDIR)/S4r/periodic_off2.o: S4r/periodic_off2.c S4r/periodic_off2.h 
+$(OBJDIR)/S4r/periodic_off2.o: S4r/periodic_off2.c S4r/periodic_off2.h S4r/geom_circum.h
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
+$(OBJDIR)/S4r/geom_circum.o: S4r/geom_circum.c S4r/geom_circum.h
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $< -o $@
 $(OBJDIR)/S4r/predicates.o: S4r/predicates.c
 	$(CC) -c -O3 $< -o $@
