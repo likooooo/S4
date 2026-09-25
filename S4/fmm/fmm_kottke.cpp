@@ -24,7 +24,7 @@
 #include <cmath>
 #include <S4.h>
 #include "../RNP/TBLAS.h"
-#ifdef HAVE_BLAS
+#if defined(HAVE_BLAS) && !defined(S4_EIGEN_BACKEND_MEKIL)
 # include "../RNP/TBLAS_ext.h"
 #endif
 #include "../RNP/LinearSolve.h"

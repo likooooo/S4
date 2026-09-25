@@ -53,7 +53,9 @@ struct LinearSolve{
 
 }; // namespace RNP
 
-#ifdef RNP_HAVE_LAPACK
+#if defined(S4_EIGEN_BACKEND_MEKIL)
+# include "LinearSolve_mekil.h"
+#elif defined(RNP_HAVE_LAPACK)
 # include "LinearSolve_lapack.h"
 #endif
 

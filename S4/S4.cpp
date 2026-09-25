@@ -27,7 +27,7 @@
 #include <complex>
 #include <float.h>
 #include <TBLAS.h>
-#ifdef HAVE_BLAS
+#if defined(HAVE_BLAS) && !defined(S4_EIGEN_BACKEND_MEKIL)
 # include <TBLAS_ext.h>
 #endif
 #include <TLASupport.h>
@@ -3531,6 +3531,11 @@ int Simulation_GetSMatrix(S4_Simulation *S, int from, int to, std::complex<doubl
 
 	S4_TRACE("< Simulation_GetSMatrix\n");
 	return 0;
+}
+
+extern "C" int Simulation_GetSMatrixToBuffer(S4_Simulation *S, int from, int to, double *buffer){
+	if(NULL == buffer){ return -4; }
+	return Simulation_GetSMatrix(S, from, to, reinterpret_cast<std::complex<double>*>(buffer));
 }
 
 

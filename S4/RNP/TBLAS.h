@@ -1784,7 +1784,9 @@ struct RandomVector{
 }; // namespace TBLAS
 }; // namespace RNP
 
-#ifdef RNP_HAVE_BLAS
+#if defined(S4_EIGEN_BACKEND_MEKIL)
+# include "TBLAS_mekil.h"
+#elif defined(RNP_HAVE_BLAS)
 # include "TBLAS_ext.h"
 #endif
 
