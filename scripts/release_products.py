@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Parameterized: build → stage → pack (C++ via CLI) → publish s4_lua objects+refs.
+"""Parameterized: rmtree build → rebuild → stage → pack (C++ via CLI) → publish s4_lua.
 
 CI / hand-publish entry: scripts/ci_release_products.py (zero-arg; fixed paths).
+No --skip-build. --skip-smoke is troubleshooting only (formal ci_* never passes it).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -25,7 +27,7 @@ def _run(cmd: list[str]) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="release_products: build+stage+pack+publish s4_lua")
+    ap = argparse.ArgumentParser(description="release_products: rmtree+build+stage+pack+publish s4_lua")
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--cli-root", type=Path, help="tool_database repo or unpacked CLI zip")
     g.add_argument("--cli-download-url", help="full URL to simdb_cli-<platform>.zip")
@@ -34,8 +36,7 @@ def main() -> int:
     ap.add_argument("--ssh-host", required=True)
     ap.add_argument("--remote-runtime-root", required=True)
     ap.add_argument("--channel", required=True, choices=("release", "trial"))
-    ap.add_argument("--skip-build", action="store_true")
-    ap.add_argument("--skip-smoke", action="store_true")
+    ap.add_argument("--skip-smoke", action="store_true", help="troubleshooting only; formal ci_* never passes")
     args = ap.parse_args()
 
     from cli_root import require_clean_git, resolve_cli_root  # noqa: E402
@@ -50,19 +51,21 @@ def main() -> int:
 
     py = sys.executable
     build_dir = args.build_dir.resolve()
+    if build_dir.is_dir():
+        print(f">>> rmtree {build_dir}", flush=True)
+        shutil.rmtree(build_dir)
 
-    if not args.skip_build:
-        build_cmd = [
-            py,
-            str(SCRIPTS / "build.py"),
-            "--build-dir",
-            str(build_dir),
-            "--platform",
-            args.platform,
-        ]
-        if args.skip_smoke:
-            build_cmd.append("--skip-smoke")
-        _run(build_cmd)
+    build_cmd = [
+        py,
+        str(SCRIPTS / "build.py"),
+        "--build-dir",
+        str(build_dir),
+        "--platform",
+        args.platform,
+    ]
+    if args.skip_smoke:
+        build_cmd.append("--skip-smoke")
+    _run(build_cmd)
 
     stage = S4_ROOT / "out" / "stage" / args.platform
     _run(

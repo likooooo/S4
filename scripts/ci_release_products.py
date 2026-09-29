@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Zero-arg product release: build → stage → pack → publish s4_lua.
+"""Zero-arg product release: rmtree out/build → rebuild → stage → pack → publish s4_lua.
 
+Self-contained: does not require a prior ci_release. No --skip-build.
 Channel from HEAD subject (release* → release, else trial).
 Pack CLI: HTTPS downloads/{channel}/simdb_cli-*.zip（禁止 --cli-root；禁止跨 channel）.
 Host platform only (linux-x86_64 | win-x86_64).
