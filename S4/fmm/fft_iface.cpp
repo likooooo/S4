@@ -13,12 +13,13 @@
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ * along with this program; if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "fft_iface.h"
 #include <cstdlib>
+#include <mutex>
 
 #ifdef HAVE_LIBFFTW3
 #include <fftw3.h>
@@ -27,9 +28,8 @@
 #include <tools/kiss_fftnd.h>
 #endif
 
-#ifdef HAVE_LIBPTHREAD
-#include <pthread.h>
-static pthread_mutex_t mutex;
+#ifdef HAVE_LIBFFTW3
+static std::mutex fft_mutex;
 #endif
 
 int fft_next_fast_size(int n){
@@ -77,14 +77,9 @@ fft_plan fft_plan_dft_2d(
 ){
 	fft_plan plan = NULL;
 #ifdef HAVE_LIBFFTW3
-# ifdef HAVE_LIBPTHREAD
-	pthread_mutex_lock(&mutex);
-# endif
+	std::lock_guard<std::mutex> lock(fft_mutex);
 	fftw_plan p;
 	p = fftw_plan_dft(2, n, (fftw_complex*)in, (fftw_complex*)out, sign, FFTW_ESTIMATE);
-# ifdef HAVE_LIBPTHREAD
-	pthread_mutex_unlock(&mutex);
-# endif
 	if(NULL != p){
 		plan = (fft_plan)malloc(sizeof(tag_fft_plan));
 		plan->plan = p;
@@ -113,13 +108,10 @@ void fft_plan_exec(const fft_plan plan){
 void fft_plan_destroy(fft_plan plan){
 	if(NULL == plan){ return; }
 #ifdef HAVE_LIBFFTW3
-# ifdef HAVE_LIBPTHREAD
-	pthread_mutex_lock(&mutex);
-# endif
-	fftw_destroy_plan(plan->plan);
-# ifdef HAVE_LIBPTHREAD
-	pthread_mutex_unlock(&mutex);
-# endif
+	{
+		std::lock_guard<std::mutex> lock(fft_mutex);
+		fftw_destroy_plan(plan->plan);
+	}
 #else
 	free(plan->cfg);
 #endif
@@ -127,19 +119,10 @@ void fft_plan_destroy(fft_plan plan){
 }
 
 void fft_init(){
-#ifdef HAVE_LIBPTHREAD
-	if(pthread_mutex_init(&mutex, NULL)){
-        printf("Unable to initialize a mutex for FFT module\n");
-    }
-#endif
 }
 
 void fft_destroy(){
 #ifdef HAVE_LIBFFTW3
 	fftw_cleanup();
 #endif
-#ifdef HAVE_LIBPTHREAD
-    pthread_mutex_destroy(&mutex);
-#endif
 }
-

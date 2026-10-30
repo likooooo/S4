@@ -1,6 +1,11 @@
 Download & Installation
 =======================
 
+**Note (this monorepo fork):** Prefer CMake via parent ``simulation_core``
+(``S4_bridge`` / MEKIL; see submodule ``README``). The Makefile / Lua / Python
+instructions below are **upstream historical** and may not match this tree
+(``Makefile.custom`` may be absent).
+
 There are two choices for downloading |S4|: downloading a binary package from below, or cloning the GitHub respository and building from source.
 The latter is the preferred method for obtaining the latest features and bug fixes.
 

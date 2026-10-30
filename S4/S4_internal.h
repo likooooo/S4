@@ -325,6 +325,8 @@ int Simulation_GetEpsilon(S4_Simulation *S, const double r[3], double eps[2]); /
 // Determinant is (rmant[0]+i*rmant[1])*base^expo
 int Simulation_GetSMatrixDeterminant(S4_Simulation *S, double rmant[2], double *base, int *expo);
 
+int Simulation_GetSMatrixToBuffer(S4_Simulation *S, int from, int to, double *buffer);
+
 
 #ifdef __cplusplus
 }
